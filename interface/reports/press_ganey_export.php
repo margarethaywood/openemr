@@ -147,6 +147,7 @@ function generatePressGaneyCSV() {
         'Language',
         'Medical Record Number',
         'Unique ID',
+        'Billing ID',
         'Location Code',
         'Location Name',
         'Attending Physician NPI',
@@ -189,15 +190,31 @@ function generatePressGaneyCSV() {
             }
         }
         
-        // Format dates (mmddyyyy)
+     // Format dates (mmddyyyy) - ensure proper zero padding and force as text
         $dob = '';
         if (!empty($row['DOB'])) {
-            $dob = date('mdY', strtotime($row['DOB']));
+            $timestamp = strtotime($row['DOB']);
+            if ($timestamp !== false) {
+                $formatted_dob = sprintf('%02d%02d%04d', 
+                    date('n', $timestamp),  // month without leading zeros
+                    date('j', $timestamp),  // day without leading zeros
+                    date('Y', $timestamp)   // 4-digit year
+                );
+                $dob = '="' . $formatted_dob . '"';  // Force as text to preserve leading zeros
+            }
         }
         
         $visit_date = '';
         if (!empty($row['visit_date'])) {
-            $visit_date = date('mdY', strtotime($row['visit_date']));
+            $timestamp = strtotime($row['visit_date']);
+            if ($timestamp !== false) {
+                $formatted_visit = sprintf('%02d%02d%04d',
+                    date('n', $timestamp),  // month without leading zeros
+                    date('j', $timestamp),  // day without leading zeros
+                    date('Y', $timestamp)   // 4-digit year
+                );
+                $visit_date = '="' . $formatted_visit . '"';  // Force as text to preserve leading zeros
+            }
         }
         
         // Format provider name
@@ -239,7 +256,8 @@ function generatePressGaneyCSV() {
             $dob,                                       // Date of Birth
             '',                                         // Language (implement if needed)
             substr($row['pubpid'] ?? '', 0, 20),        // Medical Record Number
-            $row['billing_id'] ?? '',                   // Unique ID (billing ID only)
+            substr($row['encounter'] ?? '', 0, 20),     // Unique ID 
+            $row['billing_id'] ?? '',                   // Billing ID
             $PG_LOCATION_CODE,                          // Location Code
             substr($row['facility_name'] ?? '', 0, 50), // Location Name
             substr($row['provider_npi'] ?? '', 0, 50),  // Attending Physician NPI
