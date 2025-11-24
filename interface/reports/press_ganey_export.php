@@ -34,7 +34,6 @@ if (!empty($_POST)) {
 // Press Ganey Configuration
 $PG_CLIENT_ID = '1234567';
 $PG_SURVEY_DESIGNATOR = 'PGRJ2025';
-$PG_LOCATION_CODE = 'BattleboroVT';
 
 // Form parameters
 $form_from_date = (isset($_POST['form_from_date'])) ? DateToYYYYMMDD($_POST['form_from_date']) : date('Y-m-d');
@@ -51,10 +50,10 @@ if (!empty($_POST['form_export'])) {
 
 function generatePressGaneyCSV() {
     global $form_from_date, $form_to_date, $form_provider, $form_facility, $form_encounter_type;
-    global $PG_CLIENT_ID, $PG_SURVEY_DESIGNATOR, $PG_LOCATION_CODE;
+    global $PG_CLIENT_ID, $PG_SURVEY_DESIGNATOR;
     
     $sqlBindArray = [];
-    
+        
     // Build query to get encounter and patient data
     $query = "SELECT DISTINCT
         fe.encounter,
@@ -76,6 +75,7 @@ function generatePressGaneyCSV() {
         p.phone_home,
         p.phone_cell,
         p.email,
+        fac.id as facility_id,
         fac.name as facility_name,
         fac.street as facility_street,
         fac.city as facility_city,
@@ -85,13 +85,11 @@ function generatePressGaneyCSV() {
         u.fname as provider_fname,
         u.npi as provider_npi,
         u.physician_type,
-        u.specialty,
-        b.id as billing_id
+        u.taxonomy as specialty
     FROM form_encounter AS fe
     LEFT JOIN patient_data AS p ON p.pid = fe.pid
     LEFT JOIN users AS u ON u.id = fe.provider_id
     LEFT JOIN facility AS fac ON fac.id = fe.facility_id
-    LEFT JOIN billing AS b ON b.encounter = fe.encounter AND b.pid = fe.pid AND b.activity = 1
     WHERE fe.date >= ? AND fe.date <= ? ";
     
     array_push($sqlBindArray, $form_from_date . ' 00:00:00', $form_to_date . ' 23:59:59');
@@ -147,7 +145,6 @@ function generatePressGaneyCSV() {
         'Language',
         'Medical Record Number',
         'Unique ID',
-        'Billing ID',
         'Location Code',
         'Location Name',
         'Attending Physician NPI',
@@ -223,6 +220,13 @@ function generatePressGaneyCSV() {
             $provider_name = 'Dr. ' . trim($row['provider_fname'] . ' ' . $row['provider_lname']);
         }
         
+        // Format provider type - replace underscores with spaces and use title case
+        $provider_type = '';
+        if (!empty($row['physician_type'])) {
+            $provider_type = str_replace('_', ' ', $row['physician_type']);
+            $provider_type = ucwords(strtolower($provider_type));
+        }
+        
         // Get middle initial
         $middle_initial = !empty($row['mname']) ? strtoupper(substr($row['mname'], 0, 1)) : '';
         
@@ -236,42 +240,49 @@ function generatePressGaneyCSV() {
         $facility_state = !empty($row['facility_state']) ? strtoupper(substr($row['facility_state'], 0, 2)) : '';
         
         // Format facility zip - prepend with = to force text format and preserve leading zeros
-        $facility_zip = !empty($row['facility_postal_code']) ? '="' . substr($row['facility_postal_code'], 0, 10) . '"' : '';
+        $facility_zip = '';
+        if (!empty($row['facility_postal_code'])) {
+            $zip = substr($row['facility_postal_code'], 0, 10);
+         // Add dash after first 5 digits if zip is 9 digits
+         if (strlen($zip) == 9) {
+             $zip = substr($zip, 0, 5) . '-' . substr($zip, 5);
+        }
+         $facility_zip = '="' . $zip . '"';
+}
         
         // Build data row
         $data = [
-            $PG_SURVEY_DESIGNATOR,                      // Survey Designator
-            $PG_CLIENT_ID,                              // Client ID
-            substr($row['lname'] ?? '', 0, 25),         // Last Name
-            $middle_initial,                            // Middle Initial
-            substr($row['fname'] ?? '', 0, 20),         // First Name
+           $PG_SURVEY_DESIGNATOR,                      // Survey Designator
+           $PG_CLIENT_ID,                              // Client ID
+           substr($row['lname'] ?? '', 0, 25),         // Last Name
+           $middle_initial,                            // Middle Initial
+           substr($row['fname'] ?? '', 0, 20),         // First Name
             substr($row['street'] ?? '', 0, 40),        // Address 1
             substr($row['street2'] ?? '', 0, 40),       // Address 2
             substr($row['city'] ?? '', 0, 25),          // City
             $state,                                     // State (uppercase)
-            $zip_code,                                  // Zip Code (preserves leading zeros)
+            $zip_code,                                    // Zip Code (preserves leading zeros)
             $phone_home,                                // Telephone Number
             $phone_cell,                                // Mobile Number
             $gender,                                    // Gender
-            $dob,                                       // Date of Birth
-            '',                                         // Language (implement if needed)
+            $dob,                                         // Date of Birth
+            '',                                           // Language (implement if needed)
             substr($row['pubpid'] ?? '', 0, 20),        // Medical Record Number
             substr($row['encounter'] ?? '', 0, 20),     // Unique ID 
-            $row['billing_id'] ?? '',                   // Billing ID
-            $PG_LOCATION_CODE,                          // Location Code
+            substr($row['facility_id'] ?? '', 0, 20),   // Location Code
             substr($row['facility_name'] ?? '', 0, 50), // Location Name
             substr($row['provider_npi'] ?? '', 0, 50),  // Attending Physician NPI
             substr($provider_name, 0, 50),              // Attending Physician Name
-            substr($row['physician_type'] ?? '', 0, 50), // Provider Type
+            substr($provider_type, 0, 50),              // Provider Type (formatted)
             substr($row['specialty'] ?? '', 0, 50),     // Provider Specialty
             substr($row['facility_street'] ?? '', 0, 40), // Site address 1
-            '',                                         // Site address 2
-            substr($row['facility_city'] ?? '', 0, 25),   // Site city
-            $facility_state,                            // Site state (uppercase)
-            $facility_zip,                              // Site zip (preserves leading zeros)
-            $visit_date,                                // Visit or Admin Date
-            substr($row['email'] ?? '', 0, 60),         // Email
-            '$'                                         // E.O.R. Indicator
+            '',                                             // Site address 2
+            substr($row['facility_city'] ?? '', 0, 25),  // Site city
+            $facility_state,                             // Site state (uppercase)
+            $facility_zip,                                 // Site zip (preserves leading zeros)
+            $visit_date,                                   // Visit or Admin Date
+            substr($row['email'] ?? '', 0, 60),          // Email
+            '$'                                            // E.O.R. Indicator
         ];
         
         fputcsv($output, $data);
@@ -374,7 +385,7 @@ while ($type_row = sqlFetchArray($type_res)) {
         <div class="config-info">
             <strong><?php echo xlt('Client ID'); ?>:</strong> <?php echo text($PG_CLIENT_ID); ?><br>
             <strong><?php echo xlt('Survey Designator'); ?>:</strong> <?php echo text($PG_SURVEY_DESIGNATOR); ?><br>
-            <strong><?php echo xlt('Location Code'); ?>:</strong> <?php echo text($PG_LOCATION_CODE); ?>
+
         </div>
     </div>
 
