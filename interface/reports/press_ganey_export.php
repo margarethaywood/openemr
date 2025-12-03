@@ -233,22 +233,23 @@ function generatePressGaneyCSV() {
         // Format state to uppercase USPS 2-letter abbreviation (just first 2 chars uppercase)
         $state = !empty($row['state']) ? strtoupper(substr($row['state'], 0, 2)) : '';
         
-        // Format zip code - prepend with = to force Excel/CSV to treat as text and preserve leading zeros
-        $zip_code = !empty($row['postal_code']) ? '="' . substr($row['postal_code'], 0, 10) . '"' : '';
+        // Format zip code
+        $zip_code = !empty($row['postal_code']) ? substr($row['postal_code'], 0, 10) : '';
         
         // Format facility state to uppercase USPS 2-letter abbreviation (just first 2 chars uppercase)
         $facility_state = !empty($row['facility_state']) ? strtoupper(substr($row['facility_state'], 0, 2)) : '';
         
-        // Format facility zip - prepend with = to force text format and preserve leading zeros
+        // Format facility zip
         $facility_zip = '';
         if (!empty($row['facility_postal_code'])) {
             $zip = substr($row['facility_postal_code'], 0, 10);
-         // Add dash after first 5 digits if zip is 9 digits
-         if (strlen($zip) == 9) {
-             $zip = substr($zip, 0, 5) . '-' . substr($zip, 5);
+    
+        // Add dash after first 5 digits if zip is 9 digits
+            if (strlen($zip) == 9) {
+                $zip = substr($zip, 0, 5) . '-' . substr($zip, 5);
+            }
+            $facility_zip = $zip;
         }
-         $facility_zip = '="' . $zip . '"';
-}
         
         // Build data row
         $data = [
