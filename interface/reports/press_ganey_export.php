@@ -187,32 +187,28 @@ function generatePressGaneyCSV() {
             }
         }
         
-     // Format dates (mmddyyyy) - ensure proper zero padding and force as text
-        $dob = '';
-        if (!empty($row['DOB'])) {
-            $timestamp = strtotime($row['DOB']);
-            if ($timestamp !== false) {
-                $formatted_dob = sprintf('%02d%02d%04d', 
-                    date('n', $timestamp),  // month without leading zeros
-                    date('j', $timestamp),  // day without leading zeros
-                    date('Y', $timestamp)   // 4-digit year
-                );
-                $dob = '="' . $formatted_dob . '"';  // Force as text to preserve leading zeros
-            }
-        }
+    // Format dates (mmddyyyy)
+$dob = '';
+if (!empty($row['DOB'])) {
+    $timestamp = strtotime($row['DOB']);
+    if ($timestamp !== false) {
+        $formatted_dob = date('n', $timestamp) .      // month without leading zeros
+                        date('j', $timestamp) .      // day without leading zeros
+                        date('Y', $timestamp);       // 4-digit year
+        $dob = $formatted_dob;
+    }
+}
         
-        $visit_date = '';
-        if (!empty($row['visit_date'])) {
-            $timestamp = strtotime($row['visit_date']);
-            if ($timestamp !== false) {
-                $formatted_visit = sprintf('%02d%02d%04d',
-                    date('n', $timestamp),  // month without leading zeros
-                    date('j', $timestamp),  // day without leading zeros
-                    date('Y', $timestamp)   // 4-digit year
-                );
-                $visit_date = '="' . $formatted_visit . '"';  // Force as text to preserve leading zeros
-            }
-        }
+    $visit_date = '';
+if (!empty($row['visit_date'])) {
+    $timestamp = strtotime($row['visit_date']);
+    if ($timestamp !== false) {
+        $formatted_visit = date('n', $timestamp) .      // month without leading zeros
+                          date('j', $timestamp) .      // day without leading zeros
+                          date('Y', $timestamp);       // 4-digit year
+        $visit_date = $formatted_visit;
+    }
+}
         
         // Format provider name
         $provider_name = '';
