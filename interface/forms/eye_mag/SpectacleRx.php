@@ -19,6 +19,7 @@ require_once("$srcdir/lists.inc.php");
 require_once("$srcdir/options.inc.php");
 require_once("$srcdir/patient.inc.php");
 require_once("$srcdir/report.inc.php");
+require_once("$srcdir/documents.php");
 
 use OpenEMR\Services\FacilityService;
 use OpenEMR\Core\Header;
@@ -122,23 +123,16 @@ if (($_REQUEST['mode'] ?? '') == "update") {  //store any changed fields in disp
 
 if ($_REQUEST['REFTYPE']) {
     $REFTYPE = $_REQUEST['REFTYPE'];
-    if ($REFTYPE == "AR") {
-        $RXTYPE = "Bifocal";
-    }
-
-    if ($REFTYPE == "MR") {
-        $RXTYPE = "Bifocal";
-    }
-
-    if ($REFTYPE == "CTL") {
-        $RXTYPE = "Bifocal";
-    }
+    $RXTYPE = $_REQUEST['rx_type'];
 
     $id = $_REQUEST['id'];
     $table_name = "form_eye_mag";
     $encounter = !$_REQUEST['encounter'] ? $_SESSION['encounter'] : $_REQUEST['encounter'];
 
-
+$Single      = (($RXTYPE ?? null) == '0') ? "checked='checked'" : "";
+$Bifocal     = (($RXTYPE ?? null) == '1') ? "checked='checked'" : "";
+$Trifocal    = (($RXTYPE ?? null) == '2') ? "checked='checked'" : "";
+$Progressive = (($RXTYPE ?? null) == '3') ? "checked='checked'" : "";
 
     if ($REFTYPE == "W") {
         //we have rx_number 1-5 to process...
@@ -156,21 +150,7 @@ if ($_REQUEST['REFTYPE']) {
         $ODADD2 = $wearing['ODADD'];
         $OSMIDADD = $wearing['OSMIDADD'];
         $OSADD2 = $wearing['OSADD'];
-        @extract($wearing);
-        if ($wearing['RX_TYPE'] == '0') {
-            $Single = "checked='checked'";
-            $RXTYPE = "Single";
-        } elseif ($wearing['RX_TYPE'] == '1') {
-            $Bifocal = "checked='checked'";
-            $RXTYPE = "Bifocal";
-        } elseif ($wearing['RX_TYPE'] == '2') {
-            $Trifocal = "checked='checked'";
-            $RXTYPE = "Trifocal";
-        } elseif ($wearing['RX_TYPE'] == '3') {
-            $Progressive = "checked='checked'";
-            $RXTYPE = "Progressive";
-        }
-
+       
         //do LT and Lens materials
     } elseif ($REFTYPE == "AR") {
         $ODSPH      = $data['ARODSPH'];
@@ -184,7 +164,7 @@ if ($_REQUEST['REFTYPE']) {
         $COMMENTS   = $data['CRCOMMENTS'];
         $ODADD2     = $data['ARODADD'];
         $OSADD2     = $data['AROSADD'];
-        $Bifocal    = "checked='checked'";
+        
     } elseif ($REFTYPE == "MR") {
         $ODSPH      = $data['MRODSPH'];
         $ODAXIS     = $data['MRODAXIS'];
@@ -197,7 +177,7 @@ if ($_REQUEST['REFTYPE']) {
         $COMMENTS   = $data['CRCOMMENTS'];
         $ODADD2     = $data['MRODADD'];
         $OSADD2     = $data['MROSADD'];
-        $Bifocal    = "checked='checked'";
+       
     } elseif ($REFTYPE == "CR") {
         $ODSPH      = $data['CRODSPH'];
         $ODAXIS     = $data['CRODAXIS'];
@@ -262,7 +242,7 @@ if ($_REQUEST['REFTYPE']) {
         $fields['REFDATE'] = $data['date'];
         $insert_this_id = formSubmit($table_name, $fields, $form_id, $_SESSION['userauthorized']);
     }
-}
+    }
 
 if ($_REQUEST['dispensed'] ?? '') {
     $query = "SELECT * from form_eye_mag_dispense where pid =? ORDER BY date DESC";
