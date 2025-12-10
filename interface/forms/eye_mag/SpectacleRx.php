@@ -1252,8 +1252,8 @@ if ($REFTYPE == "CTL") {
                     if ($prov_data['suffix']) {
                         echo ", " . $prov_data['suffix'];
                     } ?>
-                    <?php if (!empty($prov_data['npi'])) { ?>
-                    <br/><?php echo xlt('NPI'); ?>: <?php echo text($prov_data['npi']); ?>
+                    <?php if (!empty($prov_data['state_license_number'])) { ?>
+                    <br/><?php echo xlt('State License Number'); ?>: <?php echo text($prov_data['state_license_number']); ?>
                     <?php } ?><br/>
                     
                     <small><?php echo xlt('e-signed'); ?> <input type="checkbox" checked="checked" disabled></small>
