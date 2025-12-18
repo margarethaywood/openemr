@@ -1411,6 +1411,18 @@
             "global_req": "enable_cdr"
           },
           {
+            "label": "MIPS 509: Melanoma Tracking",
+            "menu_id": "rep0",
+            "target": "rep",
+            "url": "/interface/reports/mips_509_report.php",
+            "children": [],
+            "requirement": 0,
+            "acl_req": [
+              "patients",
+              "med"
+            ]
+          },
+          {
             "label": "Automated Measures (AMC)",
             "menu_id": "rep0",
             "target": "rep",
