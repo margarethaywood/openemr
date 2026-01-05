@@ -32,8 +32,8 @@ if (!empty($_POST)) {
 }
 
 // Press Ganey Configuration
-$PG_CLIENT_ID = '1234567';
-$PG_SURVEY_DESIGNATOR = 'PGRJ2025';
+$PG_CLIENT_ID = '175230';
+$PG_SURVEY_DESIGNATOR = 'MD0101';
 
 // Form parameters
 $form_from_date = (isset($_POST['form_from_date'])) ? DateToYYYYMMDD($_POST['form_from_date']) : date('Y-m-d');
