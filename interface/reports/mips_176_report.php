@@ -22,18 +22,9 @@ $performancePeriodEnd = '2025-12-31';
 
 // Qualifying encounter CPT/HCPCS codes for 2025
 $encounterCodes = array(
-    // Office/outpatient visits - new patient
-    '99202', '99203', '99204', '99205',
-    // Office/outpatient visits - established patient
-    '99212', '99213', '99214', '99215',
-    // Home visits - new patient
-    '99341', '99342', '99344', '99345',
-    // Home visits - established patient
-    '99347', '99348', '99349', '99350',
-    // Other evaluation codes
-    '99424', '99426',
-    // HCPCS codes
-    'G0402', 'G0468'
+    '99202', '99203', '99204', '99205', '99212', '99213', '99214', '99215','99341', '99342', '99344', '99345',
+     '99347', '99348', '99349', '99350',
+      '99424', '99426','G0402', 'G0468'
 );
 
 // Build the SQL query with encounter codes

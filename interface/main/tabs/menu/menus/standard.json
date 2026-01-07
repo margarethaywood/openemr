@@ -1447,6 +1447,18 @@
               "med"
             ]
           },
+            {
+            "label": "MIPS 410: Psoriasis Clinical Response",
+            "menu_id": "rep0",
+            "target": "rep",
+            "url": "/interface/reports/mips_410_report.php",
+            "children": [],
+            "requirement": 0,
+            "acl_req": [
+              "patients",
+              "med"
+            ]
+          },
           {
             "label": "Alerts Log",
             "menu_id": "rep0",
