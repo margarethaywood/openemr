@@ -1447,11 +1447,35 @@
               "med"
             ]
           },
+          {
+            "label": "MIPS 374: Closing the Referral Loop",
+            "menu_id": "rep0",
+            "target": "rep",
+            "url": "/interface/reports/mips_374_report.php",
+            "children": [],
+            "requirement": 0,
+            "acl_req": [
+              "patients",
+              "med"
+            ]
+          },
             {
             "label": "MIPS 410: Psoriasis Clinical Response",
             "menu_id": "rep0",
             "target": "rep",
             "url": "/interface/reports/mips_410_report.php",
+            "children": [],
+            "requirement": 0,
+            "acl_req": [
+              "patients",
+              "med"
+            ]
+          },
+          {
+            "label": "MIPS 440: Skin Cancer Biopsy Reporting Time",
+            "menu_id": "rep0",
+            "target": "rep",
+            "url": "/interface/reports/mips_440_report.php",
             "children": [],
             "requirement": 0,
             "acl_req": [
