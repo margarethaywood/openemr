@@ -1,224 +1,232 @@
 <?php
 /**
- * MIPS Quality Measure #410: Psoriasis Clinical Response to Systemic Medications
- * Denominator Report with CSV Export
+ * MIPS Quality Measure 410 - Psoriasis: Clinical Response to Systemic Medications
+ * 
+ * DENOMINATOR REPORT ONLY
+ * This report identifies patients who meet the denominator criteria.
  * 
  * Denominator Criteria:
- * 1. All patients, regardless of age
- * 2. Diagnosis for psoriasis vulgaris (ICD-10-CM): L40.0
- * 3. Patient encounter during the performance period with qualifying CPT/HCPCS codes
- * 4. Performance period: 2025-01-01 to 2025-12-31
- * 
- * Note: Manual review required to verify systemic medication treatment (G9764 criteria)
+ * - All patients (no age restriction)
+ * - Diagnosis of psoriasis vulgaris (ICD-10-CM: L40.0)
+ * - Patient encounter during the performance period with qualifying CPT/HCPCS codes
+ * - Performance period: 2025-01-01 to 2025-12-31
  */
 
+// Include OpenEMR required files
 require_once("../globals.php");
-require_once("$srcdir/patient.inc.php");
-require_once("$srcdir/options.inc.php");
+require_once("$srcdir/sql.inc.php");
 
-use OpenEMR\Common\Acl\AclMain;
-use OpenEMR\Common\Csrf\CsrfUtils;
+// Performance period dates
+$performancePeriodStart = '2025-01-01';
+$performancePeriodEnd = '2025-12-31';
 
-// Check access control
-if (!AclMain::aclCheckCore('acct', 'rep')) {
-    echo xlt('Access Denied');
-    exit;
+// Qualifying encounter CPT/HCPCS codes
+$encounterCodes = array(
+    '98000', '98001', '98002', '98003', '98004', '98005', '98006', '98007', 
+    '98008', '98009', '98010', '98011', '98012', '98013', '98014', '98015', '98016',
+    '99202', '99203', '99204', '99205', '99212', '99213', '99214', '99215',
+    '99242', '99243', '99244', '99245', '99341', '99342', '99344', '99345',
+    '99347', '99348', '99349', '99350', '99424', '99426', 'G0438', 'G0439'
+);
+
+// Build the SQL query with encounter codes
+$encounterCodesStr = "'" . implode("','", $encounterCodes) . "'";
+
+$sql = "
+SELECT DISTINCT
+    p.pid,
+    p.lname AS last_name,
+    p.fname AS first_name,
+    p.mname AS middle_name,
+    p.DOB AS date_of_birth,
+    TIMESTAMPDIFF(YEAR, p.DOB, fe.date) AS age_at_encounter,
+    fe.encounter AS encounter_id,
+    fe.date AS encounter_date,
+    fe.facility_id,
+    b.code AS billing_code,
+    CONCAT(u.lname, ', ', u.fname) AS provider_name,
+    (SELECT GROUP_CONCAT(DISTINCT CONCAT(b_dx.code, ' (', DATE_FORMAT(fe_dx.date, '%Y-%m-%d'), ')') SEPARATOR ', ')
+     FROM billing b_dx
+     INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
+     WHERE b_dx.pid = p.pid
+     AND (b_dx.code LIKE 'L40.0%' OR b_dx.code = 'L400' OR b_dx.code = 'L40.0')
+     AND b_dx.activity = 1
+     ORDER BY fe_dx.date DESC
+     LIMIT 5
+    ) AS psoriasis_diagnosis_history
+FROM 
+    patient_data p
+INNER JOIN 
+    form_encounter fe ON p.pid = fe.pid
+    AND fe.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+INNER JOIN 
+    billing b ON fe.encounter = b.encounter 
+    AND fe.pid = b.pid
+    AND b.code IN ($encounterCodesStr)
+    AND b.activity = 1
+LEFT JOIN 
+    facility fac ON fe.facility_id = fac.id
+LEFT JOIN 
+    users u ON fe.provider_id = u.id
+WHERE 
+    p.deceased_date IS NULL
+    AND EXISTS (
+        SELECT 1
+        FROM billing b_dx
+        WHERE b_dx.pid = p.pid
+        AND (b_dx.code LIKE 'L40.0%' OR b_dx.code = 'L400' OR b_dx.code = 'L40.0')
+        AND b_dx.activity = 1
+    )
+ORDER BY 
+    p.lname, p.fname, fe.date DESC
+";
+
+// Execute query
+$results = array();
+$res = sqlStatement($sql);
+
+while ($row = sqlFetchArray($res)) {
+    $results[] = $row;
 }
 
-// Handle CSV export
-if (isset($_POST['export_csv'])) {
-    if (!CsrfUtils::verifyCsrfToken($_POST["csrf_token_form"])) {
-        CsrfUtils::csrfNotVerified();
-    }
-    
-    generateCSV();
-    exit;
-}
-
-/**
- * Generate CSV export
- */
-function generateCSV() {
-    $results = getDenominatorPatients();
-    
+// Check if CSV export is requested
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     // Set headers for CSV download
     header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="mips_410_denominator_' . date('Y-m-d') . '.csv"');
+    header('Content-Disposition: attachment; filename="MIPS_410_Denominator_Report_' . date('Y-m-d') . '.csv"');
     
     $output = fopen('php://output', 'w');
     
-    // CSV headers
-    fputcsv($output, [
+    // Write header row
+    fputcsv($output, array(
         'Patient ID',
-        'Patient Name',
-        'DOB',
-        'Age',
-        'Psoriasis Vulgaris Diagnosis Date',
-        'ICD-10 Code',
-        'Qualifying Encounter Date',
-        'Encounter CPT/HCPCS Code',
-        'Systemic Medication (if documented)',
-        'Manual Review - Verify Systemic Med Treatment (G9764)'
-    ]);
+        'Last Name',
+        'First Name',
+        'Middle Name',
+        'Date of Birth',
+        'Age at Encounter',
+        'Encounter Date',
+        'Encounter ID',
+        'Billing Code',
+        'Psoriasis Diagnosis History',
+        'Provider Name',
+        'Facility ID'
+    ));
     
-    // CSV data rows
+    // Write data rows
     foreach ($results as $row) {
-        fputcsv($output, [
+        fputcsv($output, array(
             $row['pid'],
-            $row['patient_name'],
-            $row['dob'],
-            $row['age'],
-            $row['diagnosis_date'],
-            $row['icd10_code'],
+            $row['last_name'],
+            $row['first_name'],
+            $row['middle_name'],
+            $row['date_of_birth'],
+            $row['age_at_encounter'],
             $row['encounter_date'],
-            $row['encounter_code'],
-            $row['medication'],
-            'YES - Verify systemic medication treatment'
-        ]);
+            $row['encounter_id'],
+            $row['billing_code'],
+            $row['psoriasis_diagnosis_history'],
+            $row['provider_name'],
+            $row['facility_id']
+        ));
     }
     
     fclose($output);
+    exit;
 }
 
-/**
- * Get patients meeting denominator criteria
- */
-function getDenominatorPatients() {
-    // Performance period
-    $start_date = '2025-01-01';
-    $end_date = '2025-12-31';
-    
-    // Qualifying CPT/HCPCS codes for encounters
-    $encounter_codes = [
-        '98000', '98001', '98002', '98003', '98004', '98005', '98006', '98007', 
-        '98008', '98009', '98010', '98011', '98012', '98013', '98014', '98015', 
-        '98016', '99202', '99203', '99204', '99205', '99212', '99213', '99214', 
-        '99215', '99242', '99243', '99244', '99245', '99341', '99342', '99344', 
-        '99345', '99347', '99348', '99349', '99350', '99424', '99426', 'G0438', 'G0439'
-    ];
-    
-    $codes_placeholder = implode(',', array_fill(0, count($encounter_codes), '?'));
-    
-    // Query to find patients with psoriasis vulgaris and qualifying encounters
-    $query = "SELECT DISTINCT
-        p.pid,
-        CONCAT(p.fname, ' ', p.lname) AS patient_name,
-        p.DOB AS dob,
-        TIMESTAMPDIFF(YEAR, p.DOB, CURDATE()) AS age,
-        l.date AS diagnosis_date,
-        l.diagnosis AS icd10_code,
-        e.date AS encounter_date,
-        b_enc.code AS encounter_code,
-        GROUP_CONCAT(DISTINCT pr.drug SEPARATOR '; ') AS medication
-    FROM patient_data p
-    INNER JOIN lists l ON p.pid = l.pid
-    INNER JOIN form_encounter e ON p.pid = e.pid
-    INNER JOIN billing b_enc ON e.encounter = b_enc.encounter 
-        AND b_enc.code IN ($codes_placeholder)
-        AND b_enc.activity = 1
-    LEFT JOIN prescriptions pr ON p.pid = pr.patient_id 
-        AND pr.active = 1
-        AND pr.start_date <= ?
-    WHERE l.type = 'medical_problem'
-        AND l.diagnosis = 'L40.0'
-        AND (l.enddate IS NULL OR l.enddate >= ?)
-        AND e.date BETWEEN ? AND ?
-    GROUP BY p.pid, l.date, e.date, b_enc.code
-    ORDER BY p.lname, p.fname, e.date";
-    
-    $params = $encounter_codes;
-    $params[] = $end_date;
-    $params[] = $start_date;
-    $params[] = $start_date;
-    $params[] = $end_date;
-    
-    $result = sqlStatement($query, $params);
-    
-    $patients = [];
-    while ($row = sqlFetchArray($result)) {
-        $patients[] = $row;
-    }
-    
-    return $patients;
-}
-
+// Generate HTML report output
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
-    <title><?php echo xlt('MIPS QM 410 - Denominator Report'); ?></title>
-    <link rel="stylesheet" href="<?php echo $GLOBALS['assets_static_relative']; ?>/bootstrap/dist/css/bootstrap.min.css">
+    <title>MIPS 410 Psoriasis Clinical Response - Denominator Report</title>
     <style>
-        .report-container {
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .report-header {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .info-box {
-            background-color: #e7f3ff;
-            border-left: 4px solid #2196F3;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .warning-box {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .btn-export {
-            margin-top: 15px;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .report-info { background: #f0f0f0; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .report-info p { margin: 5px 0; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th { background-color: #4CAF50; color: white; padding: 12px; text-align: left; }
+        td { border: 1px solid #ddd; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        tr:hover { background-color: #ddd; }
+        .summary { margin-top: 20px; font-weight: bold; font-size: 16px; }
+        .note { background: #fff3cd; padding: 10px; margin: 10px 0; border-left: 4px solid #ffc107; }
+        .export-btn { display: inline-block; padding: 10px 20px; background: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px; }
+        .export-btn:hover { background: #45a049; }
     </style>
 </head>
 <body>
-    <div class="report-container">
-        <div class="report-header">
-            <h2><?php echo xlt('MIPS Quality Measure #410'); ?></h2>
-            <h4><?php echo xlt('Psoriasis: Clinical Response to Systemic Medications - Denominator Report'); ?></h4>
-            <p><strong><?php echo xlt('Performance Period:'); ?></strong> <?php echo xlt('January 1, 2025 - December 31, 2025'); ?></p>
-        </div>
-
-        <div class="info-box">
-            <h5><?php echo xlt('Denominator Criteria:'); ?></h5>
-            <ol>
-                <li><?php echo xlt('All patients, regardless of age'); ?></li>
-                <li><?php echo xlt('Diagnosis of psoriasis vulgaris (ICD-10-CM: L40.0)'); ?></li>
-                <li><?php echo xlt('Patient encounter during the performance period with qualifying CPT/HCPCS codes'); ?></li>
-                <li><?php echo xlt('Qualifying encounter codes: 98000-98016, 99202-99205, 99212-99215, 99242-99245, 99341-99342, 99344-99345, 99347-99350, 99424, 99426, G0438, G0439'); ?></li>
-            </ol>
-        </div>
-
-        <div class="warning-box">
-            <h5><?php echo xlt('Manual Review Required'); ?></h5>
-            <p><?php echo xlt('All patients in this denominator report require manual review to verify systemic medication treatment for psoriasis vulgaris. This corresponds to the G9764 criteria: "Patient has been treated with a systemic medication for psoriasis vulgaris."'); ?></p>
-            <p><?php echo xlt('Review patient charts for documentation of systemic medications such as:'); ?></p>
-            <ul>
-                <li><?php echo xlt('Methotrexate, Cyclosporine, Acitretin, Apremilast'); ?></li>
-                <li><?php echo xlt('Biologics: Adalimumab, Etanercept, Infliximab, Ustekinumab, Secukinumab, Ixekizumab, Guselkumab, Risankizumab, etc.'); ?></li>
-            </ul>
-        </div>
-
-        <form method="post" action="" id="report_form">
-            <input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>">
-
-            <div class="form-group">
-                <button type="submit" name="export_csv" class="btn btn-primary btn-export">
-                    <i class="fa fa-download"></i> <?php echo xlt('Export Denominator Report to CSV'); ?>
-                </button>
-            </div>
-        </form>
-
-        <div class="alert alert-info" role="alert">
-            <?php echo xlt('Click "Export Denominator Report to CSV" to download the patient list for the 2025 performance period. The report will include all patients meeting the denominator criteria who require manual review for systemic medication treatment verification.'); ?>
-        </div>
+    
+    <div class="report-info">
+     <p><strong>Measure:</strong> MIPS 410: Psoriasis: Clinical Response to Systemic Medications</p>   
+    <p><strong>Report Date:</strong> <?php echo date('Y-m-d H:i:s'); ?></p>
+        <p><strong>Performance Period:</strong> <?php echo $performancePeriodStart; ?> to <?php echo $performancePeriodEnd; ?></p>
+        <p><a href="?export=csv" class="export-btn">Export to CSV</a></p>
+    </div>
+    
+    <div class="note">
+        <strong>Note:</strong> This report identifies all patients (regardless of age) with psoriasis vulgaris (ICD-10: L40.0) 
+        who had qualifying encounters during the performance period. Manual review is required to verify that the patient 
+        has been treated with a systemic medication for psoriasis vulgaris (G9764 criteria).
+    </div>
+    
+    <div class="summary">Total Patients in Denominator: <?php echo count($results); ?></div>
+    
+    <?php if (count($results) > 0): ?>
+        <table>
+            <tr>
+                <th>Patient ID</th>
+                <th>Patient Name</th>
+                <th>DOB</th>
+                <th>Age</th>
+                <th>Encounter Date</th>
+                <th>Encounter ID</th>
+                <th>Billing Code</th>
+                <th>Diagnosis History</th>
+                <th>Provider</th>
+                <th>Facility</th>
+            </tr>
+            
+            <?php foreach ($results as $row): ?>
+            <tr>
+                <td><?php echo htmlspecialchars($row['pid']); ?></td>
+                <td><?php echo htmlspecialchars($row['last_name'] . ', ' . $row['first_name']); ?></td>
+                <td><?php echo htmlspecialchars($row['date_of_birth']); ?></td>
+                <td><?php echo htmlspecialchars($row['age_at_encounter']); ?></td>
+                <td><?php echo htmlspecialchars($row['encounter_date']); ?></td>
+                <td><?php echo htmlspecialchars($row['encounter_id']); ?></td>
+                <td><?php echo htmlspecialchars($row['billing_code']); ?></td>
+                <td><?php echo htmlspecialchars($row['psoriasis_diagnosis_history']); ?></td>
+                <td><?php echo htmlspecialchars($row['provider_name']); ?></td>
+                <td><?php echo htmlspecialchars($row['facility_id']); ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php else: ?>
+        <p>No patients found meeting the denominator criteria for the specified performance period.</p>
+    <?php endif; ?>
+    
+    <div style="margin-top: 30px; padding: 15px; background: #e7f3ff; border-left: 4px solid #2196F3;">
+        <h3>Denominator Criteria:</h3>
+        <ol>
+            <li>All patients (no age restriction)</li>
+            <li>Diagnosis of psoriasis vulgaris (ICD-10-CM: L40.0)</li>
+            <li>Patient encounter during performance period with qualifying CPT/HCPCS codes</li>
+        </ol>
+        
+        <h3>Next Steps for Manual Review:</h3>
+        <ol>
+            <li>Verify patient has been treated with a systemic medication for psoriasis vulgaris (G9764 criteria)</li>
+            <li>Review patient chart for documentation of systemic medications such as:
+                <ul>
+                    <li>Methotrexate, Cyclosporine, Acitretin, Apremilast</li>
+                    <li>Biologics: Adalimumab, Etanercept, Infliximab, Ustekinumab, Secukinumab, Ixekizumab, Guselkumab, Risankizumab, etc.</li>
+                </ul>
+            </li>
+            <li>For qualifying patients in the denominator, assess clinical response using appropriate numerator criteria</li>
+        </ol>
     </div>
 </body>
 </html>
