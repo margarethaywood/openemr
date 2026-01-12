@@ -2,13 +2,12 @@
 /**
  * MIPS Quality Measure 509 - Melanoma Continuity of Care
  * 
- * NUMERATOR REPORT ONLY
- * This report identifies patients who meet the numerator criteria.
+ * DENOMINATOR REPORT ONLY
+ * This report identifies patients who meet the denominator criteria.
  * 
- * Numerator Criteria:
- * - Patients aged >= 18 years at time of encounter during performance period
- * - Patient encounter during the performance period (2025-01-01 to 2025-12-31) with qualifying CPT codes
+ * Report Denominator Criteria:
  * - Diagnosis of melanoma (C43%) or melanoma in situ (D03%) between 2020-01-01 and 2025-12-31
+ * - Any qualifying encounter during the performance period (2025-01-01 to 2025-12-31) with qualifying CPT codes
  */
 
 // Include OpenEMR required files
@@ -39,12 +38,12 @@ SELECT DISTINCT
     p.fname AS first_name,
     p.mname AS middle_name,
     p.DOB AS date_of_birth,
-    TIMESTAMPDIFF(YEAR, p.DOB, fe.date) AS age_at_encounter,
     fe.encounter AS encounter_id,
     fe.date AS encounter_date,
+    TIMESTAMPDIFF(YEAR, p.DOB, fe.date) AS age_at_encounter,
     fe.facility_id,
     b.code AS billing_code,
-    CONCAT(u.lname, ', ', u.fname) AS provider_name,
+       CONCAT(u.lname, ', ', u.fname) AS provider_name,
     (SELECT GROUP_CONCAT(DISTINCT CONCAT(b_dx.code, ' (', DATE_FORMAT(fe_dx.date, '%Y-%m-%d'), ')') SEPARATOR ', ')
      FROM billing b_dx
      INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
@@ -58,26 +57,24 @@ SELECT DISTINCT
 FROM 
     patient_data p
 INNER JOIN 
-    form_encounter fe ON p.pid = fe.pid
+    billing b_melanoma ON p.pid = b_melanoma.pid
 INNER JOIN 
-    billing b ON fe.encounter = b.encounter AND fe.pid = b.pid
+    form_encounter fe_melanoma ON b_melanoma.encounter = fe_melanoma.encounter
+LEFT JOIN 
+    form_encounter fe ON p.pid = fe.pid 
+    AND fe.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+LEFT JOIN 
+    billing b ON fe.encounter = b.encounter 
+    AND fe.pid = b.pid
+    AND b.code IN ($encounterCodesStr)
+    AND b.activity = 1
 LEFT JOIN 
     users u ON fe.provider_id = u.id
 WHERE 
-    fe.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
-    AND TIMESTAMPDIFF(YEAR, p.DOB, fe.date) >= 18
-    AND b.code IN ($encounterCodesStr)
-    AND b.activity = 1
+    (b_melanoma.code LIKE 'C43%' OR b_melanoma.code LIKE 'D03%')
+    AND fe_melanoma.date BETWEEN '$diagnosisDateStart' AND '$diagnosisDateEnd'
+    AND b_melanoma.activity = 1
     AND p.deceased_date IS NULL
-    AND EXISTS (
-        SELECT 1
-        FROM billing b_dx
-        INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
-        WHERE b_dx.pid = p.pid
-        AND (b_dx.code LIKE 'C43%' OR b_dx.code LIKE 'D03%')
-        AND fe_dx.date BETWEEN '$diagnosisDateStart' AND '$diagnosisDateEnd'
-        AND b_dx.activity = 1
-    )
 ORDER BY 
     p.lname, p.fname, fe.date DESC
 ";
@@ -94,7 +91,7 @@ while ($row = sqlFetchArray($res)) {
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     // Set headers for CSV download
     header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="MIPS_509_Numerator_Report_' . date('Y-m-d') . '.csv"');
+    header('Content-Disposition: attachment; filename="MIPS_509_Denominator_Report_' . date('Y-m-d') . '.csv"');
     
     $output = fopen('php://output', 'w');
     
@@ -141,7 +138,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MIPS 509 Melanoma Tracking and Evaluation of Recurrence</title>
+    <title>MIPS 509 Melanoma Continuity of Care - Numerator Report</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1 { color: #333; }
@@ -159,9 +156,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </style>
 </head>
 <body>
-   
+    
     <div class="report-info">
-    <p><strong>Measure Description:</strong> Melanoma Tracking and Evaluation of Recurrence</p>    
+    <p><strong>Measure Description:</strong> MIPS 509: Melanoma Tracking</p>   
     <p><strong>Report Date:</strong> <?php echo date('Y-m-d H:i:s'); ?></p>
         <p><strong>Performance Period:</strong> <?php echo $performancePeriodStart; ?> to <?php echo $performancePeriodEnd; ?></p>
         <p><strong>Diagnosis Date Range:</strong> <?php echo $diagnosisDateStart; ?> to <?php echo $diagnosisDateEnd; ?></p>
@@ -169,9 +166,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
     
     <div class="note">
-        <strong>Note:</strong> This report identifies patients aged 18+ who had qualifying encounters during the performance period 
-        and have a diagnosis of melanoma (C43%) or melanoma in situ (D03%) documented between 2020-01-01 and 2025-12-31. 
-        The diagnosis history column also displays any instances of Z85.820 (Personal history of malignant melanoma of skin). Manual review is required to verify numerator compliance with recall system requirements.
+        <strong>Note:</strong> This report identifies ALL patients with a diagnosis of melanoma (C43%) or melanoma in situ (D03%) 
+        documented between 2020-01-01 and 2025-12-31. If the patient had a qualifying encounter during the performance period (2025), 
+        those encounter details are shown. The diagnosis history column also displays any instances of Z85.820 (Personal history of malignant melanoma of skin) for reference. 
+        Manual review is required to verify numerator compliance with recall system requirements.
     </div>
     
     <div class="summary">Total Patients in Numerator: <?php echo count($results); ?></div>
@@ -207,24 +205,17 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <?php endforeach; ?>
         </table>
     <?php else: ?>
-        <p>No patients found meeting the numerator criteria for the specified performance period.</p>
+        <p>No patients found meeting the denominator criteria for the specified performance period.</p>
     <?php endif; ?>
     
     <div style="margin-top: 30px; padding: 15px; background: #e7f3ff; border-left: 4px solid #2196F3;">
-        <h3>Numerator Criteria:</h3>
+        <h3>Denominator Criteria:</h3>
         <ol>
-            <li>Patients aged >= 18 years at time of encounter</li>
-            <li>Qualifying encounter during performance period (2025-01-01 to 2025-12-31)</li>
-            <li>Diagnosis of melanoma (ICD-10: C43%) or melanoma in situ (ICD-10: D03%) between 2020-01-01 and 2025-12-31</li>
+            <li>All patients with diagnosis of melanoma (ICD-10: C43%) or melanoma in situ (ICD-10: D03%) between 2020-01-01 and 2025-12-31</li>
+            <li>Qualifying encounters during performance period (2025-01-01 to 2025-12-31) are shown if they exist</li>
+            <li>Patients without qualifying encounters in 2025 are still included if they have melanoma diagnosis in the 5-year period</li>
         </ol>
         
-        <h3>Next Steps for Manual Review:</h3>
-        <ol>
-            <li>Verify melanoma diagnosis codes (C43% or D03%) are properly documented in patient chart</li>
-            <li>Review patient chart for documentation of recall system or follow-up care plan</li>
-            <li>Confirm continuity of care requirements are met per measure specifications</li>
-            <li>Document performance met or exceptions as applicable</li>
-        </ol>
     </div>
 </body>
 </html>
