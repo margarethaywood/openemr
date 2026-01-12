@@ -1483,6 +1483,18 @@
               "med"
             ]
           },
+           {
+            "label": "MIPS 509: Melanoma Tracking",
+            "menu_id": "rep0",
+            "target": "rep",
+            "url": "/interface/reports/mips_509_report.php",
+            "children": [],
+            "requirement": 0,
+            "acl_req": [
+              "patients",
+              "med"
+            ]
+          },
           {
             "label": "Alerts Log",
             "menu_id": "rep0",
