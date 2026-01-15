@@ -24,9 +24,8 @@ require_once("$srcdir/sql.inc.php");
 $performancePeriodStart = '2025-01-01';
 $performancePeriodEnd = '2025-12-24';
 
-// Qualifying biopsy procedure CPT codes (11xxx series)
-// Using LIKE pattern in SQL to match all codes beginning with 11
-$procedurePattern = '11%';
+// Qualifying biopsy procedure CPT codes
+$procedureCodes = array('11102', '11103', '11104', '11601', '11602', '11641', '11642', '11621', '11622');
 
 // Diagnosis codes for cutaneous basal cell carcinoma or squamous cell carcinoma
 $bccSccCodes = array(
@@ -64,6 +63,7 @@ $otherMalignantCodes = array(
 $allDiagnosisCodes = array_merge($bccSccCodes, $melanomaCodes, $otherMalignantCodes);
 
 // Build SQL strings
+$procedureCodesStr = "'" . implode("','", $procedureCodes) . "'";
 $diagnosisCodesStr = "'" . implode("','", $allDiagnosisCodes) . "'";
 
 $sql = "
@@ -97,7 +97,7 @@ INNER JOIN
 INNER JOIN 
     billing b_proc ON fe.encounter = b_proc.encounter 
     AND fe.pid = b_proc.pid
-    AND b_proc.code LIKE '$procedurePattern'
+    AND b_proc.code IN ($procedureCodesStr)
     AND b_proc.activity = 1
 LEFT JOIN 
     facility fac ON fe.facility_id = fac.id
@@ -266,7 +266,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <div style="margin-top: 30px; padding: 15px; background: #e7f3ff; border-left: 4px solid #2196F3;">
         <h3>Denominator Criteria:</h3>
         <ol>
-            <li>Biopsy procedure codes: All codes beginning with 11xxx (e.g., 11100, 11101, 11102, 11103, 11104, 11105, 11106, 11107)</li>
+            <li>Biopsy procedure codes: 11102, 11103, 11601, 11602, 11641, 11642, 11621, 11622</li>
             <li>Diagnosis of cutaneous BCC, SCC, or melanoma (including in situ disease)</li>
             <li>Patient encounter during performance period (01/01/2025 to 12/24/2025)</li>
         </ol>
