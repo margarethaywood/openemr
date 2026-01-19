@@ -37,6 +37,7 @@ SELECT DISTINCT
     p.lname AS last_name,
     p.fname AS first_name,
     p.mname AS middle_name,
+    p.sex,
     p.DOB AS date_of_birth,
     fe.encounter AS encounter_id,
     fe.date AS encounter_date,
@@ -101,6 +102,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Last Name',
         'First Name',
         'Middle Name',
+        'Sex',
         'Date of Birth',
         'Age at Encounter',
         'Encounter Date',
@@ -118,6 +120,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['last_name'],
             $row['first_name'],
             $row['middle_name'],
+            $row['sex'],
             $row['date_of_birth'],
             $row['age_at_encounter'],
             $row['encounter_date'],
@@ -179,6 +182,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <tr>
                 <th>Patient ID</th>
                 <th>Patient Name</th>
+                <th>Sex</th>
                 <th>DOB</th>
                 <th>Age</th>
                 <th>Encounter Date</th>
@@ -193,6 +197,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <tr>
                 <td><?php echo htmlspecialchars($row['pid']); ?></td>
                 <td><?php echo htmlspecialchars($row['last_name'] . ', ' . $row['first_name']); ?></td>
+                <td><?php echo htmlspecialchars($row['sex']); ?></td>   
                 <td><?php echo htmlspecialchars($row['date_of_birth']); ?></td>
                 <td><?php echo htmlspecialchars($row['age_at_encounter']); ?></td>
                 <td><?php echo htmlspecialchars($row['encounter_date']); ?></td>
