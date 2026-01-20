@@ -7,6 +7,7 @@
  * 
  * Denominator Criteria:
  * - All patients (no age restriction)
+ * - Diagnosis of neoplasm of uncertain behavior of skin (ICD-10-CM: D48.5) during performance period
  * - Patient encounter during the performance period with qualifying CPT codes
  * - Patient referred to another provider during the performance period
  * 
@@ -40,14 +41,22 @@ SELECT DISTINCT
     p.fname AS first_name,
     p.mname AS middle_name,
     p.DOB AS date_of_birth,
-    TIMESTAMPDIFF(YEAR, p.DOB, fe.date) AS age_at_encounter,
+    p.sex,
     fe.encounter AS encounter_id,
     fe.date AS encounter_date,
     fe.facility_id,
     b.code AS billing_code,
-    b.code_type,
-    b.code_text AS code_description,
-    CONCAT(u.lname, ', ', u.fname) AS provider_name
+    CONCAT(u.lname, ', ', u.fname) AS provider_name,
+    (SELECT GROUP_CONCAT(DISTINCT CONCAT(b_dx.code, ' (', DATE_FORMAT(fe_dx.date, '%Y-%m-%d'), ')') SEPARATOR ', ')
+     FROM billing b_dx
+     INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
+     WHERE b_dx.pid = p.pid
+     AND (b_dx.code LIKE 'D48.5%' OR b_dx.code = 'D485' OR b_dx.code = 'D48.5')
+     AND fe_dx.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+     AND b_dx.activity = 1
+     ORDER BY fe_dx.date DESC
+     LIMIT 5
+    ) AS d485_diagnosis_history
 FROM 
     patient_data p
 INNER JOIN 
@@ -61,6 +70,15 @@ WHERE
     AND b.code IN ($encounterCodesStr)
     AND b.activity = 1
     AND p.deceased_date IS NULL
+    AND EXISTS (
+        SELECT 1
+        FROM billing b_dx
+        INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
+        WHERE b_dx.pid = p.pid
+        AND (b_dx.code LIKE 'D48.5%' OR b_dx.code = 'D485' OR b_dx.code = 'D48.5')
+        AND fe_dx.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+        AND b_dx.activity = 1
+    )
 ORDER BY 
     p.lname, p.fname, fe.date DESC
 ";
@@ -88,14 +106,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'First Name',
         'Middle Name',
         'Date of Birth',
-        'Age at Encounter',
+        'Sex',
         'Encounter Date',
         'Encounter ID',
         'Billing Code',
-        'Code Type',
-        'Code Description',
         'Provider Name',
         'Facility ID',
+        'D48.5 Diagnosis History',
         'Referral Made (Y/N)',
         'Referral Date',
         'Referred To',
@@ -111,14 +128,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['first_name'],
             $row['middle_name'],
             $row['date_of_birth'],
-            $row['age_at_encounter'],
+            $row['sex'],
             $row['encounter_date'],
             $row['encounter_id'],
             $row['billing_code'],
-            $row['code_type'],
-            $row['code_description'],
             $row['provider_name'],
             $row['facility_id'],
+            $row['d485_diagnosis_history'],
             '', // Referral Made - to be filled manually
             '', // Referral Date - to be filled manually
             '', // Referred To - to be filled manually
@@ -158,9 +174,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
     
     <div class="report-info">
+         <p><strong>Measure Description:</strong> Percentage of patients with referrals, regardless of age, for which the referring provider received a report from the provider to whom the patient was referred</p>
         <p><strong>Report Date:</strong> <?php echo date('Y-m-d H:i:s'); ?></p>
         <p><strong>Performance Period:</strong> <?php echo $performancePeriodStart; ?> to <?php echo $performancePeriodEnd; ?></p>
-        <p><strong>Measure Description:</strong> MIPS Quality Measure 374 - Closing the Referral Loop</p>
         <p><a href="?export=csv" class="export-btn">Export to CSV</a></p>
     </div>
     
@@ -169,11 +185,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         <strong>Denominator Criteria:</strong>
         <ul>
             <li>All patients (no age restriction)</li>
+            <li>Diagnosis of neoplasm of uncertain behavior of skin (ICD-10-CM: D48.5) during the performance period</li>
             <li>Had a qualifying encounter during the performance period</li>
             <li><strong>AND were referred to another provider during the performance period</strong></li>
         </ul>
-        <strong>Note:</strong> The patients listed below meet criteria #1 and #2 only. Manual chart review is required to determine 
-        if criterion #3 (referral made) is met. Only patients with confirmed referrals should be included in the final denominator.
+        <strong>Note:</strong> The patients listed below meet criteria #1, #2, and #3. Manual chart review is required to determine 
+        if criterion #4 (referral made) is met. Only patients with confirmed referrals should be included in the final denominator.
     </div>
     
     <div class="summary">Total Patients with Qualifying Encounters: <?php echo count($results); ?></div>
@@ -184,13 +201,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <th>Patient ID</th>
                 <th>Patient Name</th>
                 <th>DOB</th>
-                <th>Age</th>
+                <th>Sex</th>
                 <th>Encounter Date</th>
                 <th>Encounter ID</th>
                 <th>Billing Code</th>
-                <th>Code Description</th>
                 <th>Provider</th>
                 <th>Facility ID</th>
+                <th>D48.5 Diagnosis History</th>
             </tr>
             
             <?php foreach ($results as $row): ?>
@@ -198,13 +215,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <td><?php echo htmlspecialchars($row['pid']); ?></td>
                 <td><?php echo htmlspecialchars($row['last_name'] . ', ' . $row['first_name']); ?></td>
                 <td><?php echo htmlspecialchars($row['date_of_birth']); ?></td>
-                <td><?php echo htmlspecialchars($row['age_at_encounter']); ?></td>
+                <td><?php echo htmlspecialchars($row['sex']); ?></td>
                 <td><?php echo htmlspecialchars($row['encounter_date']); ?></td>
                 <td><?php echo htmlspecialchars($row['encounter_id']); ?></td>
                 <td><?php echo htmlspecialchars($row['billing_code']); ?></td>
-                <td><?php echo htmlspecialchars($row['code_description']); ?></td>
                 <td><?php echo htmlspecialchars($row['provider_name']); ?></td>
                 <td><?php echo htmlspecialchars($row['facility_id']); ?></td>
+                <td><?php echo htmlspecialchars($row['d485_diagnosis_history']); ?></td>
             </tr>
             <?php endforeach; ?>
         </table>
@@ -264,7 +281,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     
     <div style="margin-top: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd;">
         <h3>Performance Period Note:</h3>
-        <p>The performance period for this measure is <strong>January 1, 2025 through October 31, 2025</strong> to ensure all referrals and specialist reports are evaluated within this timeframe.</p>
+        <p>The performance period for this measure is <strong>January 1, 2025 through October 31, 2025</strong> (10 months). 
+        Ensure all referrals and specialist reports are evaluated within this timeframe.</p>
     </div>
 </body>
 </html>
