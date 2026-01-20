@@ -9,6 +9,7 @@
  * Denominator Criteria:
  * - Patients aged >= 18 years on date of encounter
  * - Patient encounter during the performance period with qualifying CPT/HCPCS codes
+ * - Diagnosis of psoriasis (ICD-10: L40%) during the performance period
  * - Patient receiving first-time biologic and/or immune response modifier therapy (G2182)
  * - Encounter reason field contains biologic/immune therapy keywords
  */
@@ -120,7 +121,17 @@ SELECT DISTINCT
     b.code AS billing_code,
     b.code_type,
     b.code_text AS code_description,
-    CONCAT(u.lname, ', ', u.fname) AS provider_name
+    CONCAT(u.lname, ', ', u.fname) AS provider_name,
+    (SELECT GROUP_CONCAT(DISTINCT CONCAT(b_dx.code, ' (', DATE_FORMAT(fe_dx.date, '%Y-%m-%d'), ')') SEPARATOR ', ')
+     FROM billing b_dx
+     INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
+     WHERE b_dx.pid = p.pid
+     AND b_dx.code LIKE 'L40%'
+     AND b_dx.activity = 1
+     AND fe_dx.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+     ORDER BY fe_dx.date DESC
+     LIMIT 5
+    ) AS psoriasis_diagnosis_history
 FROM 
     patient_data p
 INNER JOIN 
@@ -138,6 +149,15 @@ WHERE
     AND b.activity = 1
     AND p.deceased_date IS NULL
     AND $therapyKeywords
+    AND EXISTS (
+        SELECT 1
+        FROM billing b_dx
+        INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
+        WHERE b_dx.pid = p.pid
+        AND b_dx.code LIKE 'L40%'
+        AND b_dx.activity = 1
+        AND fe_dx.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+    )
 ORDER BY 
     p.lname, p.fname, fe.date DESC
 ";
@@ -172,6 +192,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Billing Code',
         'Code Type',
         'Code Description',
+        'Psoriasis Diagnosis History',
         'Provider Name',
         'Facility Name'
     ));
@@ -191,6 +212,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['billing_code'],
             $row['code_type'],
             $row['code_description'],
+            $row['psoriasis_diagnosis_history'],
             $row['provider_name'],
             $row['facility_name']
         ));
@@ -234,8 +256,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
     
     <div class="note">
-        <strong>Note:</strong> This report identifies patients aged 18+ who had qualifying encounters during the performance period 
-        <strong>AND</strong> whose encounter reason field contains biologic/immune therapy medication keywords. 
+        <strong>Note:</strong> This report identifies patients aged 18+ who had qualifying encounters during the performance period, 
+        <strong>a psoriasis diagnosis (ICD-10: L40%)</strong>, <strong>AND</strong> whose encounter reason field contains biologic/immune therapy medication keywords. 
         Manual review is required to verify: (1) first-time biologic/immune response modifier therapy was initiated (G2182), 
         (2) TB screening was performed and results interpreted within 12 months prior to therapy initiation, and (3) any documented exceptions.
     </div>
@@ -254,6 +276,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <th>Encounter ID</th>
                 <th>Billing Code</th>
                 <th>Code Description</th>
+                <th>Psoriasis Diagnosis</th>
                 <th>Provider</th>
                 <th>Facility</th>
             </tr>
@@ -269,6 +292,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <td><?php echo htmlspecialchars($row['encounter_id']); ?></td>
                 <td><?php echo htmlspecialchars($row['billing_code']); ?></td>
                 <td><?php echo htmlspecialchars($row['code_description']); ?></td>
+                <td><?php echo htmlspecialchars($row['psoriasis_diagnosis_history']); ?></td>
                 <td><?php echo htmlspecialchars($row['provider_name']); ?></td>
                 <td><?php echo htmlspecialchars($row['facility_name']); ?></td>
             </tr>
@@ -284,6 +308,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <li>Patients aged >= 18 years on date of encounter</li>
             <li>Patient encounter during the performance period (<?php echo $performancePeriodStart; ?> to <?php echo $performancePeriodEnd; ?>)</li>
             <li>Qualifying CPT/HCPCS encounter codes present</li>
+            <li><strong>Diagnosis of psoriasis (ICD-10: L40%) during the performance period</strong></li>
             <li>Encounter reason field contains biologic/immune therapy medication keywords</li>
         </ol>
         
