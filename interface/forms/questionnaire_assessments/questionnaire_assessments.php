@@ -19,12 +19,12 @@ use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Forms\CoreFormToPortalUtility;
 use OpenEMR\Common\Twig\TwigContainer;
 use OpenEMR\Core\Header;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Services\QuestionnaireResponseService;
 use OpenEMR\Services\QuestionnaireService;
 
 // block of code to securely support use by the patient portal
 // Need access to classes, so run autoloader now instead of in globals.php.
-$GLOBALS['already_autoloaded'] = true;
 require_once(__DIR__ . "/../../../vendor/autoload.php");
 $isPortal = CoreFormToPortalUtility::isPatientPortalSession($_GET);
 if ($isPortal) {
@@ -33,6 +33,7 @@ if ($isPortal) {
 $patientPortalOther = CoreFormToPortalUtility::isPatientPortalOther($_GET);
 
 require_once(__DIR__ . "/../../globals.php");
+require_once(OEGlobalsBag::getInstance()->getString('srcdir') . "/api.inc.php");
 require_once("$srcdir/user.inc.php");
 // used for form generation utilities
 require_once("$srcdir/options.inc.php");

@@ -50,11 +50,6 @@ function hl7Zip($s)
     return hl7Text(preg_replace('/[-\s]*/', '', (string) $s));
 }
 
-function hl7Date($s)
-{
-    return preg_replace('/[^\d]/', '', (string) $s);
-}
-
 function hl7Time($s)
 {
     if (empty($s)) {
@@ -563,7 +558,7 @@ function send_hl7_order($ppid, $out)
     }
 
   // Falling through to here indicates success.
-    EventAuditLogger::instance()->newEvent(
+    EventAuditLogger::getInstance()->newEvent(
         "proc_order_xmit",
         $_SESSION['authUser'],
         $_SESSION['authProvider'],
