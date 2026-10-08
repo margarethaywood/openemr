@@ -19,14 +19,14 @@ require_once("../globals.php");
 require_once("$srcdir/sql.inc.php");
 
 // Performance period dates (modify as needed)
-$performancePeriodStart = '2025-01-01';
-$performancePeriodEnd = '2025-12-31';
+$performancePeriodStart = '2026-01-01';
+$performancePeriodEnd = '2026-12-31';
 
-// Qualifying encounter CPT/HCPCS codes for 2025
-$encounterCodes = array(
+// Qualifying encounter CPT/HCPCS codes for 2026
+$encounterCodes = array('98000', '98001', '98002', '98003', '98004',
+'98005', '98006', '98007', '98008', '98009', '98010', '98011', '98012', '98013', '98014', '98015', '98016',
     '99202', '99203', '99204', '99205', '99212', '99213', '99214', '99215','99341', '99342', '99344', '99345',
-     '99347', '99348', '99349', '99350',
-      '99424', '99426','G0402', 'G0468'
+     '99347', '99348', '99349', '99350', '99424', '99426','G0402', 'G0468'
 );
 
 // Build the SQL query with encounter codes
@@ -98,9 +98,16 @@ $therapyKeywords = "
     OR LOWER(fe.reason) LIKE '%xeljanz%'
     OR LOWER(fe.reason) LIKE '%rinvoq%'
     OR LOWER(fe.reason) LIKE '%stelara%'
-    OR LOWER(fe.reason) LIKE '%therapy%'
+    OR LOWER(fe.reason) LIKE '%rituximab%'
+    OR LOWER(fe.reason) LIKE '%rituxan%'
+    OR LOWER(fe.reason) LIKE '%tyenne%'
+    OR LOWER(fe.reason) LIKE '%tofidence%'
+    OR LOWER(fe.reason) LIKE '%simlandi%'
+    OR LOWER(fe.reason) LIKE '%yusimry%'
+    OR LOWER(fe.reason) LIKE '%pyzchiva%'
+    OR LOWER(fe.reason) LIKE '%selarsdi%'
+    OR LOWER(fe.reason) LIKE '%wezlana%'
     OR LOWER(fe.reason) LIKE '%biologic%'
-    OR LOWER(fe.reason) LIKE '%immune%'
     OR LOWER(fe.reason) LIKE '%modifier%')
 ";
 
@@ -131,7 +138,15 @@ SELECT DISTINCT
      AND fe_dx.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
      ORDER BY fe_dx.date DESC
      LIMIT 5
-    ) AS psoriasis_diagnosis_history
+    ) AS psoriasis_diagnosis_history,
+    (SELECT GROUP_CONCAT(DISTINCT DATE_FORMAT(fe_g.date, '%Y-%m-%d') ORDER BY fe_g.date ASC SEPARATOR ', ')
+     FROM billing b_g
+     INNER JOIN form_encounter fe_g ON b_g.encounter = fe_g.encounter AND b_g.pid = fe_g.pid
+     WHERE b_g.pid = p.pid
+     AND b_g.code = 'G2182'
+     AND b_g.activity = 1
+     AND fe_g.date BETWEEN '$performancePeriodStart' AND '$performancePeriodEnd'
+    ) AS g2182_encounter_dates
 FROM 
     patient_data p
 INNER JOIN 
@@ -193,6 +208,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Code Type',
         'Code Description',
         'Psoriasis Diagnosis History',
+        'G2182 Encounter Date(s)',
         'Provider Name',
         'Facility Name'
     ));
@@ -213,6 +229,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['code_type'],
             $row['code_description'],
             $row['psoriasis_diagnosis_history'],
+            $row['g2182_encounter_dates'],
             $row['provider_name'],
             $row['facility_name']
         ));
@@ -257,12 +274,21 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     
     <div class="note">
         <strong>Note:</strong> This report identifies patients aged 18+ who had qualifying encounters during the performance period, 
-        <strong>a psoriasis diagnosis (ICD-10: L40%)</strong>, <strong>AND</strong> whose encounter reason field contains biologic/immune therapy medication keywords. 
+       a psoriasis diagnosis (ICD-10: L40%), AND whose encounter reason field contains biologic/immune therapy medication keywords. 
         Manual review is required to verify: (1) first-time biologic/immune response modifier therapy was initiated (G2182), 
         (2) TB screening was performed and results interpreted within 12 months prior to therapy initiation, and (3) any documented exceptions.
     </div>
     
+    <?php
+    $g2182Pids = array();
+    foreach ($results as $r) {
+        if (!empty($r['g2182_encounter_dates'])) {
+            $g2182Pids[$r['pid']] = true;
+        }
+    }
+    ?>
     <div class="summary">Total Patients in Denominator: <?php echo count($results); ?></div>
+    <div class="summary">Patients with G2182 Documented: <?php echo count($g2182Pids); ?></div>
     
     <?php if (count($results) > 0): ?>
         <table>
@@ -277,6 +303,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <th>Billing Code</th>
                 <th>Code Description</th>
                 <th>Psoriasis Diagnosis</th>
+                <th>G2182 Encounter Date(s)</th>
                 <th>Provider</th>
                 <th>Facility</th>
             </tr>
@@ -293,6 +320,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <td><?php echo htmlspecialchars($row['billing_code']); ?></td>
                 <td><?php echo htmlspecialchars($row['code_description']); ?></td>
                 <td><?php echo htmlspecialchars($row['psoriasis_diagnosis_history']); ?></td>
+                <td><?php echo htmlspecialchars($row['g2182_encounter_dates'] ?? ''); ?></td>
                 <td><?php echo htmlspecialchars($row['provider_name']); ?></td>
                 <td><?php echo htmlspecialchars($row['facility_name']); ?></td>
             </tr>
@@ -314,7 +342,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         
         <h3>Next Steps for Manual Review:</h3>
         <ol>
-            <li>Verify patient received first-time biologic and/or immune response modifier therapy (G2182) during the performance period</li>
+            <li>Verify patient received first-time biologic and/or immune response modifier therapy (G2182) during the performance period. See the G2182 Encounter Date(s) column; blank means G2182 has not been added to a fee sheet yet</li>
             <li>For qualifying patients, verify TB screening was performed and results interpreted within 12 months prior to biologic therapy initiation</li>
             <li>Check for documentation of medical reasons for not screening (denominator exceptions)</li>
             <li>Document performance met (M1003), exception (M1004), or performance not met (M1005)</li>
