@@ -73,9 +73,7 @@ SELECT DISTINCT
     fe.encounter AS encounter_id,
     fe.date AS encounter_date,
     TIMESTAMPDIFF(YEAR, p.DOB, fe.date) AS age_at_encounter,
-    fe.facility_id,
     b.code AS billing_code,
-    CONCAT(u.lname, ', ', u.fname) AS provider_name,
     (SELECT GROUP_CONCAT(DISTINCT CONCAT(b_dx.code, ' (', DATE_FORMAT(fe_dx.date, '%Y-%m-%d'), ')') SEPARATOR ', ')
      FROM billing b_dx
      INNER JOIN form_encounter fe_dx ON b_dx.encounter = fe_dx.encounter
@@ -99,8 +97,6 @@ LEFT JOIN
     AND fe.pid = b.pid
     AND b.code IN ($encounterCodesStr)
     AND b.activity = 1
-LEFT JOIN
-    users u ON fe.provider_id = u.id
 WHERE
     (b_melanoma.code LIKE 'C43%' OR b_melanoma.code LIKE 'D03%')
     AND fe_melanoma.date BETWEEN '$diagnosisDateStartTs' AND '$diagnosisDateEndTs'
@@ -298,7 +294,7 @@ $uniquePatientCount = count($patients);
 // ---------------------------------------------------------------------------
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="MIPS_509_Denominator_Report_' . date('Y-m-d') . '.csv"');
+    header('Content-Disposition: attachment; filename="MIPS_509_Report_' . date('Y-m-d') . '.csv"');
 
     $output = fopen('php://output', 'w');
 
@@ -316,9 +312,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Measure Codes on This Fee Sheet',
         'Criteria 1 Status',
         'Criteria 2 Status',
-        'Melanoma Diagnosis History',
-        'Provider Name',
-        'Facility ID'
+        'Melanoma Diagnosis History'
     ));
 
     foreach ($results as $row) {
@@ -336,9 +330,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             implode('; ', getEncounterEntries($encounterCodeHistory, $row['encounter_id'])),
             $patients[$row['pid']]['crit1_status'],
             $patients[$row['pid']]['crit2_status'],
-            $row['melanoma_diagnosis_history'],
-            $row['provider_name'],
-            $row['facility_id']
+            $row['melanoma_diagnosis_history']
         ));
     }
 
@@ -348,7 +340,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
 if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
     header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="MIPS_509_Measure_Code_Tracking_' . date('Y-m-d') . '.csv"');
+    header('Content-Disposition: attachment; filename="MIPS_509_Eligible_Patient_Tracking_' . date('Y-m-d') . '.csv"');
 
     $output = fopen('php://output', 'w');
 
@@ -382,12 +374,21 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
     exit;
 }
 
+/** Patient ID cell that opens the patient's dashboard */
+function patientLink($pid)
+{
+    $pid = (int)$pid;
+    $href = $GLOBALS['webroot'] . '/interface/patient_file/summary/demographics.php?set_pid=' . $pid;
+    return '<a class="pid-link" href="' . htmlspecialchars($href) . '" target="_blank" '
+        . 'onclick="return goPid(' . $pid . ');" title="Open patient dashboard">' . $pid . '</a>';
+}
+
 // Generate HTML report output
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MIPS 509 Melanoma: Tracking and Evaluation of Recurrence - Denominator &amp; Measure Code Tracking</title>
+    <title>MIPS 509 Melanoma: Tracking and Evaluation of Recurrence</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1 { color: #333; }
@@ -412,7 +413,36 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
         .counts td, .counts th { padding: 6px 12px; }
         .counts { width: auto; }
         .codes { font-size: 12px; white-space: nowrap; }
+        .pid-link { color: #1a5fb4; font-weight: bold; text-decoration: underline; cursor: pointer; }
     </style>
+    <script>
+        // Open the patient's dashboard. Uses the OpenEMR tab UI when this report runs inside it,
+        // otherwise falls back to the legacy frame layout or a new browser tab.
+        function goPid(pid) {
+            var url = <?php echo json_encode($GLOBALS['webroot'] . '/interface/patient_file/summary/demographics.php?set_pid='); ?> + encodeURIComponent(pid);
+            try {
+                if (typeof top.restoreSession === 'function') {
+                    top.restoreSession();
+                }
+                if (typeof top.navigateTab === 'function') {
+                    top.navigateTab(url, 'pat', function () {
+                        if (typeof top.activateTabByName === 'function') {
+                            top.activateTabByName('pat', true);
+                        }
+                    });
+                    return false;
+                }
+                if (top.RTop) {
+                    top.RTop.location = url;
+                    return false;
+                }
+            } catch (e) {
+                // fall through to new tab
+            }
+            window.open(url, '_blank');
+            return false;
+        }
+    </script>
 </head>
 <body>
 
@@ -423,7 +453,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
         <p><strong>Diagnosis / Excision Lookback Range:</strong> <?php echo $diagnosisDateStart; ?> to <?php echo $diagnosisDateEnd; ?></p>
         <p>
             <a href="?export=csv" class="export-btn">Export Encounter Detail to CSV</a>
-            <a href="?export=csv_tracking" class="export-btn">Export Measure Code Tracking to CSV</a>
+            <a href="?export=csv_tracking" class="export-btn">Export Eligible Patient Tracking to CSV</a>
         </p>
     </div>
 
@@ -477,7 +507,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
     }
     ?>
 
-    <h2>Measure Code Tracking by Patient</h2>
+    <h2>Measure Tracking by Eligible Patient</h2>
 
     <?php if ($uniquePatientCount > 0): ?>
         <table>
@@ -494,7 +524,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
 
             <?php foreach ($patients as $pt): ?>
             <tr>
-                <td><?php echo htmlspecialchars($pt['pid']); ?></td>
+                <td><?php echo patientLink($pt['pid']); ?></td>
                 <td><?php echo htmlspecialchars($pt['last_name'] . ', ' . $pt['first_name']); ?></td>
                 <td><?php echo htmlspecialchars($pt['date_of_birth']); ?></td>
                 <td class="codes"><?php echo htmlList($pt['excision_cpts']); ?></td>
@@ -509,7 +539,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
         <p>No patients found meeting the denominator criteria for the specified performance period.</p>
     <?php endif; ?>
 
-    <h2>Encounter Detail</h2>
+    <h2>Eligible Patient 2026 Encounter Detail</h2>
 
     <?php if (count($results) > 0): ?>
         <table>
@@ -524,13 +554,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
                 <th>Billing Code</th>
                 <th>Measure Codes on This Fee Sheet</th>
                 <th>Melanoma Diagnosis History</th>
-                <th>Provider</th>
-                <th>Facility ID</th>
             </tr>
 
             <?php foreach ($results as $row): ?>
             <tr>
-                <td><?php echo htmlspecialchars($row['pid']); ?></td>
+                <td><?php echo patientLink($row['pid']); ?></td>
                 <td><?php echo htmlspecialchars($row['last_name'] . ', ' . $row['first_name']); ?></td>
                 <td><?php echo htmlspecialchars($row['sex']); ?></td>
                 <td><?php echo htmlspecialchars($row['date_of_birth']); ?></td>
@@ -540,8 +568,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv_tracking') {
                 <td><?php echo htmlspecialchars($row['billing_code']); ?></td>
                 <td class="codes"><?php echo htmlList(getEncounterEntries($encounterCodeHistory, $row['encounter_id'])); ?></td>
                 <td><?php echo htmlspecialchars($row['melanoma_diagnosis_history']); ?></td>
-                <td><?php echo htmlspecialchars($row['provider_name']); ?></td>
-                <td><?php echo htmlspecialchars($row['facility_id']); ?></td>
             </tr>
             <?php endforeach; ?>
         </table>
