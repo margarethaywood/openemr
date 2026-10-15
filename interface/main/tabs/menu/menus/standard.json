@@ -1447,11 +1447,11 @@
               "med"
             ]
           },
-          {
-            "label": "MIPS 374: Closing the Referral Loop",
+           {
+            "label": "MIPS 238: High Risk Meds",
             "menu_id": "rep0",
             "target": "rep",
-            "url": "/interface/reports/mips_374_report.php",
+            "url": "/interface/reports/mips_238_report.php",
             "children": [],
             "requirement": 0,
             "acl_req": [
@@ -1471,18 +1471,7 @@
               "med"
             ]
           },
-          {
-            "label": "MIPS 440: Skin Cancer Biopsy Reporting Time",
-            "menu_id": "rep0",
-            "target": "rep",
-            "url": "/interface/reports/mips_440_report.php",
-            "children": [],
-            "requirement": 0,
-            "acl_req": [
-              "patients",
-              "med"
-            ]
-          },
+        
            {
             "label": "MIPS 509: Melanoma Tracking",
             "menu_id": "rep0",
